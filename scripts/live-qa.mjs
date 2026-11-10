@@ -177,9 +177,51 @@ async function cancelBody(response) {
   }
 }
 
+const PROBE_BYTES = 1024
+const FILE_MAGICS = [
+  { name: '%PDF', bytes: [0x25, 0x50, 0x44, 0x46] },
+  { name: 'PK', bytes: [0x50, 0x4b, 0x03, 0x04] },
+  { name: 'BOOKMOBI', bytes: [0x42, 0x4f, 0x4f, 0x4b, 0x4d, 0x4f, 0x42, 0x49] },
+  { name: 'OLE2', bytes: [0xd0, 0xcf, 0x11, 0xe0] }
+]
+
+/** Does the leading chunk start with a known ebook file magic? */
+function hasFileMagic(chunk) {
+  return FILE_MAGICS.some((magic) => {
+    if (chunk.length < magic.bytes.length) return false
+    return magic.bytes.every((byte, index) => chunk[index] === byte)
+  })
+}
+
+/** Short, credential-free body excerpt for an HTML failure message. */
+function htmlExcerpt(chunk) {
+  const text = new TextDecoder('utf-8', { fatal: false })
+    .decode(chunk)
+    .replace(/<[^>]*>/g, ' ')
+    .replace(/https?:\/\/\S+/gi, '<url>')
+    .replace(/\s+/g, ' ')
+    .trim()
+  return text.length > 200 ? `${text.slice(0, 200)}...` : text
+}
+
+/** Extract `<title>` text from an HTML body when present. */
+function htmlTitle(chunk) {
+  const text = new TextDecoder('utf-8', { fatal: false }).decode(chunk)
+  const match = text.match(/<title[^>]*>([\s\S]*?)<\/title>/i)
+  if (!match) return ''
+  return match[1].replace(/\s+/g, ' ').trim().slice(0, 120)
+}
+
 /**
- * Fetch the resolved file with BookOrbit's fixed downloader headers and prove
- * a non-empty, non-HTML response. Only the first range chunk is read.
+ * Fetch the resolved file with the real BookOrbit initial download shape: a
+ * plain GET with the `User-Agent: BookOrbit` and any-content-type `Accept`
+ * headers, and no Range header. The Range probe is intentionally not used
+ * because Chomikuj mislabels 206 responses as `text/html` even when the body
+ * is the ebook file.
+ *
+ * Only the first chunk (up to 1024 bytes) is read. The probe passes when bytes
+ * were read and either the content-type is not HTML or the body begins with a
+ * known ebook magic number.
  */
 async function probeFileUrl(url) {
   let response
@@ -187,7 +229,7 @@ async function probeFileUrl(url) {
     response = await fetch(url, {
       headers: {
         'User-Agent': 'BookOrbit',
-        Range: 'bytes=0-1023'
+        Accept: '*/*'
       },
       redirect: 'follow',
       signal: AbortSignal.timeout(TIMEOUT_MS)
@@ -204,31 +246,44 @@ async function probeFileUrl(url) {
     throw new Error(`HTTP ${status}`)
   }
 
-  if (contentType.toLowerCase().includes('html')) {
-    await cancelBody(response)
-    throw new Error(`HTML content-type "${contentType}"`)
-  }
-
-  let bytes = 0
+  let chunk
   try {
     if (response.body) {
       const reader = response.body.getReader()
       const { value, done } = await reader.read()
-      if (!done && value) bytes = value.byteLength
+      chunk = !done && value ? value.subarray(0, PROBE_BYTES) : new Uint8Array(0)
       try {
         await reader.cancel()
       } catch {
         // Ignore cleanup errors.
       }
     } else {
-      const buffer = await response.arrayBuffer()
-      bytes = buffer.byteLength
+      const buffer = new Uint8Array(await response.arrayBuffer())
+      chunk = buffer.subarray(0, PROBE_BYTES)
     }
   } catch (error) {
     throw new Error(`body read error: ${error?.message ?? String(error)}`)
   }
 
+  const bytes = chunk.byteLength
   if (bytes <= 0) throw new Error('empty response body')
+
+  const isHtml = contentType.toLowerCase().includes('html')
+  const magic = hasFileMagic(chunk)
+  if (isHtml && !magic) {
+    const title = htmlTitle(chunk)
+    const excerpt = htmlExcerpt(chunk)
+    throw new Error(
+      [
+        `HTML response: HTTP ${status}`,
+        `content-type="${contentType || '(none)'}"`,
+        title === '' ? '' : `title="${title}"`,
+        excerpt === '' ? '' : `body="${excerpt}"`
+      ]
+        .filter((part) => part !== '')
+        .join('; ')
+    )
+  }
 
   return { status, contentType: contentType || '(none)', bytes }
 }
