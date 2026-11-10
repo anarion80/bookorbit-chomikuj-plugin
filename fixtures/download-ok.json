@@ -1,0 +1,23 @@
+{
+  "source": "synthetic",
+  "capturedAt": "2026-11-10T09:30:00.000Z",
+  "body": {
+    "Code": 0,
+    "FileUrl": "https://example.invalid/download/synthetic-file?token=redacted",
+    "Name": "Synthetic Author - Testowa Książka.epub",
+    "LicenseValidTo": "2026-11-10T10:30:00.000Z",
+    "AccountBalance": {
+      "BalanceInfo": "6,9 GB",
+      "BalanceInfoShort": "6,9 GB",
+      "DownloadsAvailable": true,
+      "DownloadsQouta": 100,
+      "HasUnlimitedTransfer": false,
+      "Points": 120,
+      "PointsAvailable": true,
+      "PointsInfo": "120 pkt",
+      "QuotaAdditional": 0,
+      "QuotaLeft": 7340031,
+      "QuotaPeriodical": 7340032
+    }
+  }
+}

@@ -1,0 +1,9 @@
+{
+  "source": "synthetic",
+  "capturedAt": "2026-11-10T09:30:00.000Z",
+  "body": {
+    "ApiKey": "synthetic-api-key-0000-0000-0000-000000000000",
+    "AccountId": 90000001,
+    "AccountName": "synthetic-test-account"
+  }
+}

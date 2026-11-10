@@ -1,0 +1,13 @@
+{
+  "source": "synthetic",
+  "capturedAt": "2026-11-10T09:30:00.000Z",
+  "body": {
+    "AvatarUrl": "https://example.invalid/avatars/synthetic-test-account.png",
+    "BalanceInfo": "7,0 GB",
+    "HasUnlimitedTransfer": false,
+    "Points": 120,
+    "PointsAvailable": true,
+    "PointsInfo": "120 pkt",
+    "Transfer": 7340032
+  }
+}

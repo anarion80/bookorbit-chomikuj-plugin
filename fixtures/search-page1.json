@@ -1,0 +1,61 @@
+{
+  "source": "synthetic",
+  "capturedAt": "2026-11-10T09:30:00.000Z",
+  "body": {
+    "Code": 0,
+    "Results": [
+      {
+        "FileId": 200000001,
+        "FileName": "Synthetic Author - Testowa Książka",
+        "FileType": "epub",
+        "Size": 1024,
+        "MediaType": "Documents",
+        "Owner": {
+          "Id": "90000001",
+          "Name": "synthetic-uploader"
+        },
+        "FolderId": 40000001,
+        "FolderName": "Synthetic Ebooks",
+        "IsFileFreeForUser": true,
+        "SmallThumbnailImg": "https://example.invalid/thumbs/200000001-small.jpg",
+        "ThumbnailImg": "https://example.invalid/thumbs/200000001.jpg",
+        "StreamingUrl": "https://example.invalid/stream/200000001"
+      },
+      {
+        "FileId": 200000002,
+        "FileName": "Synthetic Author - Another Synthetic Title",
+        "FileType": "pdf",
+        "Size": 4096,
+        "MediaType": "Documents",
+        "Owner": {
+          "Id": "90000002",
+          "Name": "synthetic-uploader-2"
+        },
+        "FolderId": 40000002,
+        "FolderName": "Synthetic PDFs",
+        "IsFileFreeForUser": false,
+        "SmallThumbnailImg": "https://example.invalid/thumbs/200000002-small.jpg",
+        "ThumbnailImg": "https://example.invalid/thumbs/200000002.jpg",
+        "StreamingUrl": "https://example.invalid/stream/200000002"
+      },
+      {
+        "FileId": 200000003,
+        "FileName": "[PL] Synthetic Author - Trzecia Książka",
+        "FileType": "mobi",
+        "Size": 2048,
+        "MediaType": "Documents",
+        "Owner": {
+          "Id": "90000001",
+          "Name": "synthetic-uploader"
+        },
+        "FolderId": 40000001,
+        "FolderName": "Synthetic Ebooks",
+        "IsFileFreeForUser": true,
+        "SmallThumbnailImg": "https://example.invalid/thumbs/200000003-small.jpg",
+        "ThumbnailImg": "https://example.invalid/thumbs/200000003.jpg",
+        "StreamingUrl": "https://example.invalid/stream/200000003"
+      }
+    ],
+    "IsNextPageAvailable": true
+  }
+}

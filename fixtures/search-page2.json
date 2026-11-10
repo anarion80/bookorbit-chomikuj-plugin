@@ -1,0 +1,27 @@
+{
+  "source": "synthetic",
+  "capturedAt": "2026-11-10T09:30:00.000Z",
+  "body": {
+    "Code": 0,
+    "Results": [
+      {
+        "FileId": 200000004,
+        "FileName": "Synthetic Author - Ostatnia Strona",
+        "FileType": "epub",
+        "Size": 512,
+        "MediaType": "Documents",
+        "Owner": {
+          "Id": "90000003",
+          "Name": "synthetic-uploader-3"
+        },
+        "FolderId": 40000003,
+        "FolderName": "Synthetic Last Page",
+        "IsFileFreeForUser": false,
+        "SmallThumbnailImg": "https://example.invalid/thumbs/200000004-small.jpg",
+        "ThumbnailImg": "https://example.invalid/thumbs/200000004.jpg",
+        "StreamingUrl": "https://example.invalid/stream/200000004"
+      }
+    ],
+    "IsNextPageAvailable": false
+  }
+}

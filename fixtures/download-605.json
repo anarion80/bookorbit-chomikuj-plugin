@@ -1,0 +1,21 @@
+{
+  "source": "synthetic",
+  "capturedAt": "2026-11-10T09:30:00.000Z",
+  "body": {
+    "Code": 605,
+    "Message": "Not enough transfer",
+    "AccountBalance": {
+      "BalanceInfo": "0 B",
+      "BalanceInfoShort": "0 B",
+      "DownloadsAvailable": false,
+      "DownloadsQouta": 0,
+      "HasUnlimitedTransfer": false,
+      "Points": 0,
+      "PointsAvailable": false,
+      "PointsInfo": "0 pkt",
+      "QuotaAdditional": 0,
+      "QuotaLeft": 0,
+      "QuotaPeriodical": 7340032
+    }
+  }
+}
