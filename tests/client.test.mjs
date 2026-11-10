@@ -81,11 +81,26 @@ export default async function run(h) {
     h.expectEqual(headers['User-Agent'], USER_AGENT, 'login: static mobile User-Agent')
     h.expectEqual(
       headers.Token,
-      signToken('account/login', '', expectedBody),
+      signToken('api/v3/account/login', '', expectedBody),
       'login: token signs the request body'
     )
     h.ok('login: no Api-Key header', !Object.hasOwn(headers, 'Api-Key'))
     h.expectEqual(payload, body, 'login: returns the parsed payload')
+  }
+
+  // --- login: an Unauthorized business response is not a token error -------
+  {
+    const { fetchImpl, calls } = createFakeFetch([
+      jsonResponse({ Code: 401, Message: 'Unauthorized' })
+    ])
+    const client = createClient({ fetchImpl })
+    const error = await capture(client.login('alice', 'secret'))
+
+    h.expectEqual(calls.length, 1, 'login: Unauthorized makes one fetch call')
+    h.expectEqual(error?.failure, 'unauthorized', 'login: Unauthorized is unauthorized')
+    h.expectEqual(error?.retryable, false, 'login: Unauthorized is non-retryable')
+    h.expectEqual(error?.status, 200, 'login: Unauthorized keeps the HTTP status')
+    h.expectEqual(error?.code, 401, 'login: Unauthorized keeps the business code')
   }
 
   // --- accountInfo: exact URL, token, and Api-Key -------------------------
@@ -104,7 +119,7 @@ export default async function run(h) {
     h.expectEqual(headers['User-Agent'], USER_AGENT, 'accountInfo: static mobile User-Agent')
     h.expectEqual(
       headers.Token,
-      signToken('account/info', '', ''),
+      signToken('api/v3/account/info', '', ''),
       'accountInfo: token for the empty query and body'
     )
     h.expectEqual(headers['Api-Key'], API_KEY, 'accountInfo: sends Api-Key')
@@ -178,17 +193,17 @@ export default async function run(h) {
 
     h.expectEqual(
       calls[0].init.headers.Token,
-      signToken('files/search', firstQuery, ''),
+      signToken('api/v3/files/search', firstQuery, ''),
       'searchPage: token signs the observed wire query string'
     )
     h.expectEqual(
       calls[0].init.headers.Token,
-      '7d6a667a66f8a2666afe58dc8db6fcc4',
+      '83b420ec92a611e58b884b89e68ac530',
       'searchPage: token matches the known-answer vector'
     )
     h.expectEqual(
       calls[1].init.headers.Token,
-      signToken('files/search', secondQuery, ''),
+      signToken('api/v3/files/search', secondQuery, ''),
       'searchPage: token tracks the Extension-less query string'
     )
     h.expectEqual(calls[0].init.headers['Api-Key'], API_KEY, 'searchPage: sends Api-Key')
@@ -375,7 +390,7 @@ export default async function run(h) {
     )
     h.expectEqual(
       calls[0].init.headers.Token,
-      signToken('files/download', 'FileId=200000001', ''),
+      signToken('api/v3/files/download', 'FileId=200000001', ''),
       'downloadUrl: token signs the FileId query'
     )
     h.ok(

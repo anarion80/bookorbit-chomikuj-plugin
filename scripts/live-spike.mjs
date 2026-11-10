@@ -182,12 +182,13 @@ function isCode(code, expected) {
 
 async function apiFetch(method, pathValue, query, bodyText, apiKey) {
   const normalizedPath = String(pathValue).replace(/^\/+/, '')
+  const tokenPath = `api/v3/${normalizedPath}`
   const pathQuery = normalizedPath + (query ? `?${query}` : '')
   const url = `${BASE_URL}/${pathQuery}`
 
   const headers = {
     'User-Agent': API_USER_AGENT,
-    Token: signToken(normalizedPath, query, bodyText ?? '')
+    Token: signToken(tokenPath, query, bodyText ?? '')
   }
   if (bodyText !== undefined) {
     headers['Content-Type'] = 'application/json; charset=utf-8'
@@ -511,38 +512,38 @@ async function runLive(input) {
 const TOKEN_VECTORS = [
   {
     name: 'account/info (no query, no body)',
-    path: 'account/info',
+    path: 'api/v3/account/info',
     query: '',
     body: '',
-    expected: '7f9de9e90cb427d8aaad405c71c1d0f4'
+    expected: '22dbb80e516477793934fa0add1b8929'
   },
   {
     name: 'files/search exact query string',
-    path: 'files/search',
+    path: 'api/v3/files/search',
     query: SEARCH_QUERY,
     body: '',
-    expected: '7d6a667a66f8a2666afe58dc8db6fcc4'
+    expected: '83b420ec92a611e58b884b89e68ac530'
   },
   {
     name: 'files/download FileId query',
-    path: 'files/download',
+    path: 'api/v3/files/download',
     query: 'FileId=123456',
     body: '',
-    expected: '84c3a2089bd10124f7e31dd01d4b1593'
+    expected: 'bfdebdece4cef4a17ebe44808ab4cda4'
   },
   {
     name: 'account/login compact JSON body',
-    path: 'account/login',
+    path: 'api/v3/account/login',
     query: '',
     body: '{"AccountName":"alice","Password":"p@ss"}',
-    expected: '318c4f502d0c00a3d92bfe29d98a17f0'
+    expected: '9f78082445ecf973cb41180065a0fc50'
   },
   {
     name: 'account/login Unicode body',
-    path: 'account/login',
+    path: 'api/v3/account/login',
     query: '',
     body: '{"AccountName":"żółć","Password":"päss"}',
-    expected: 'a033dc4fe119a8bbdb0f8358aa96e568'
+    expected: '801e16c63c58dede556adfa87c78476e'
   }
 ]
 
@@ -571,7 +572,7 @@ function runSelfTest() {
   }
 
   check('token strips one leading slash', () => {
-    expectEqual(signToken('/account/info'), TOKEN_VECTORS[0].expected, 'token')
+    expectEqual(signToken('/api/v3/account/info'), TOKEN_VECTORS[0].expected, 'token')
   })
 
   check('redaction removes credentials and identifying account fields', () => {

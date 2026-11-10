@@ -17,38 +17,38 @@ const MD5_HEX = /^[0-9a-f]{32}$/
 const VECTORS = [
   {
     name: 'account/info with no query and no body',
-    path: 'account/info',
+    path: 'api/v3/account/info',
     query: '',
     body: '',
-    expected: '7f9de9e90cb427d8aaad405c71c1d0f4'
+    expected: '22dbb80e516477793934fa0add1b8929'
   },
   {
     name: 'files/search with the exact query string',
-    path: 'files/search',
+    path: 'api/v3/files/search',
     query: 'Query=test&PageNumber=1&MediaType=Documents&Extension=pdf',
     body: '',
-    expected: '7d6a667a66f8a2666afe58dc8db6fcc4'
+    expected: '83b420ec92a611e58b884b89e68ac530'
   },
   {
     name: 'files/download with a FileId query',
-    path: 'files/download',
+    path: 'api/v3/files/download',
     query: 'FileId=123456',
     body: '',
-    expected: '84c3a2089bd10124f7e31dd01d4b1593'
+    expected: 'bfdebdece4cef4a17ebe44808ab4cda4'
   },
   {
     name: 'account/login with a compact JSON body',
-    path: 'account/login',
+    path: 'api/v3/account/login',
     query: '',
     body: '{"AccountName":"alice","Password":"p@ss"}',
-    expected: '318c4f502d0c00a3d92bfe29d98a17f0'
+    expected: '9f78082445ecf973cb41180065a0fc50'
   },
   {
     name: 'account/login with a Unicode body',
-    path: 'account/login',
+    path: 'api/v3/account/login',
     query: '',
     body: '{"AccountName":"żółć","Password":"päss"}',
-    expected: 'a033dc4fe119a8bbdb0f8358aa96e568'
+    expected: '801e16c63c58dede556adfa87c78476e'
   }
 ]
 
@@ -82,12 +82,12 @@ export default async function run(h) {
 
   // Leading slashes are stripped, not signed.
   h.expectEqual(
-    signToken('/account/info'),
+    signToken('/api/v3/account/info'),
     VECTORS[0].expected,
     'signToken strips one leading slash'
   )
   h.expectEqual(
-    signToken('//account/info'),
+    signToken('//api/v3/account/info'),
     VECTORS[0].expected,
     'signToken strips repeated leading slashes'
   )
@@ -95,21 +95,21 @@ export default async function run(h) {
   // Default arguments and an explicit empty query are equivalent: no '?' is
   // added when the query is empty.
   h.expectEqual(
-    signToken('account/info'),
-    signToken('account/info', '', ''),
+    signToken('api/v3/account/info'),
+    signToken('api/v3/account/info', '', ''),
     'signToken omits the "?" when the query is empty'
   )
   h.expectEqual(
-    signToken('account/info', '', ''),
+    signToken('api/v3/account/info', '', ''),
     VECTORS[0].expected,
     'signToken with explicit empty query matches the no-query vector'
   )
 
   // A trailing slash is part of the path and must change the digest.
-  const trailingSlash = signToken('account/info/')
+  const trailingSlash = signToken('api/v3/account/info/')
   h.expectEqual(
     trailingSlash,
-    '04cd8c6cf8d09a054941249903ab29eb',
+    'fd75d7d488c54390b51a5bc0a54700a0',
     'signToken signs a trailing slash as part of the path'
   )
   h.ok(
@@ -118,7 +118,7 @@ export default async function run(h) {
   )
 
   // A wrong secret must not reproduce any known-answer vector.
-  const wrongSecretHash = signWithSecret(WRONG_SECRET, 'account/info')
+  const wrongSecretHash = signWithSecret(WRONG_SECRET, 'api/v3/account/info')
   h.ok(
     'a deliberately wrong secret produces a different hash',
     wrongSecretHash !== VECTORS[0].expected,

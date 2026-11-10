@@ -198,7 +198,7 @@ export function createClient({
   function apiHeaders(pathValue, queryString, apiKey, body) {
     const headers = {
       'User-Agent': userAgent,
-      Token: signToken(pathValue, queryString, body ?? ''),
+      Token: signToken(`api/v3/${pathValue}`, queryString, body ?? ''),
       'Api-Key': apiKey
     }
     return headers
@@ -251,7 +251,7 @@ export function createClient({
     const headers = {
       'User-Agent': userAgent,
       'Content-Type': 'application/json; charset=utf-8',
-      Token: signToken(LOGIN_PATH, '', body)
+      Token: signToken(`api/v3/${LOGIN_PATH}`, '', body)
     }
 
     const response = await send(
