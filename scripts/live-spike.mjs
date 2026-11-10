@@ -346,6 +346,10 @@ async function runLive(input) {
       throw new Error(`no ApiKey in response${code}${message}`)
     }
 
+    // Register the session key as a secret before any fixture write or error
+    // path can render server-provided free text such as Message.
+    secrets.push(loginPayload.ApiKey)
+
     if (loginPayload.AccountId !== undefined && loginPayload.AccountId !== null) {
       secrets.push(String(loginPayload.AccountId))
     }
@@ -601,6 +605,13 @@ function runSelfTest() {
       expect(serialized.includes(leak) === false, `leaked ${leak}`)
     }
     expect(serialized.includes(REDACTED), 'redaction marker missing')
+  })
+
+  check('sanitizeText redacts an API key inside free text', () => {
+    const key = 'FAKE_API_KEY_123'
+    const text = sanitizeText(`boom ${key}`, [key])
+    expect(text.includes(REDACTED), 'redaction marker missing')
+    expect(text.includes(key) === false, 'API key leaked in free text')
   })
 
   check('no-env path returns exit code 2 without echoing values', () => {
