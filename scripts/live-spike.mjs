@@ -3,9 +3,11 @@
  * BookOrbit Chomikuj plugin - Wave 0 live feasibility spike (owner-run).
  *
  * Purpose: prove that a FileUrl resolved from Chomikuj's mobile API can be
- * fetched by BookOrbit's fixed downloader headers:
+ * fetched by the real BookOrbit initial download headers:
  *   User-Agent: BookOrbit
- *   Range: bytes=0-1023
+ *   Accept: any
+ * and isolate whether a text/html response comes from that User-Agent, the
+ * Range header, or the remote page itself.
  *
  * This script is deliberately standalone (Node 24, ESM, no npm packages).
  * It is NOT part of the plugin; Todo 1 only.
@@ -231,48 +233,98 @@ function extractSearchResults(payload) {
   return null
 }
 
-async function probeFileUrl(fileUrl) {
+const PROBE_BYTE_LIMIT = 1024
+const BODY_SNIPPET_LIMIT = 160
+const URL_RE = /https?:\/\/[^\s"'<>]+/gi
+const TOKEN_QUERY_RE = /\b(?:token|sig|signature|apikey|api_key|key|session|auth|expires|hash|password|passwd)=[^\s&"'<>]+/gi
+const LONG_TOKEN_RE = /\b[A-Za-z0-9_-]{32,}\b/g
+
+/** Redact URLs, token-like query params, long tokens, secrets, and emails. */
+function sanitizeBodySnippet(value, secrets = []) {
+  let text = sanitizeText(value, secrets)
+  text = text.replace(URL_RE, '<redacted-url>')
+  text = text.replace(TOKEN_QUERY_RE, '<redacted-token>')
+  text = text.replace(LONG_TOKEN_RE, '<redacted-token>')
+  return text
+}
+
+function extractHtmlTitle(html) {
+  const match = /<title[^>]*>([\s\S]*?)<\/title>/i.exec(html)
+  return match ? match[1].replace(/\s+/g, ' ').trim() : ''
+}
+
+function responseHost(responseUrl) {
+  try {
+    return new URL(responseUrl).host || '(none)'
+  } catch {
+    return '(none)'
+  }
+}
+
+function buildProbes() {
+  return [
+    {
+      name: 'bookorbit-initial',
+      headers: { 'User-Agent': BOOKORBIT_USER_AGENT, Accept: '*/*' }
+    },
+    {
+      name: 'bookorbit-range',
+      headers: { 'User-Agent': BOOKORBIT_USER_AGENT, Range: 'bytes=0-1023' }
+    },
+    {
+      name: 'mobile-initial',
+      headers: { 'User-Agent': API_USER_AGENT }
+    },
+    {
+      name: 'mobile-range',
+      headers: { 'User-Agent': API_USER_AGENT, Range: 'bytes=0-1023' }
+    }
+  ]
+}
+
+/**
+ * Request the same FileUrl once with the given headers. Reads at most the first
+ * 1 KiB of the body, records only the final host, and sanitizes title/body.
+ */
+async function probeOnce(fileUrl, probe, secrets = []) {
+  const summary = {
+    name: probe.name,
+    status: null,
+    host: '(none)',
+    contentType: '',
+    bytes: 0,
+    title: '',
+    snippet: '',
+    error: ''
+  }
+
   let response
   try {
     response = await fetch(fileUrl, {
-      headers: {
-        'User-Agent': BOOKORBIT_USER_AGENT,
-        Range: 'bytes=0-1023'
-      },
+      headers: probe.headers,
       redirect: 'follow',
       signal: AbortSignal.timeout(60_000)
     })
   } catch (error) {
-    throw new Error(`request error: ${error.message}`)
+    summary.error = sanitizeBodySnippet(`request error: ${error.message}`, secrets)
+    return summary
   }
 
-  const status = response.status
+  summary.status = response.status
+  summary.host = responseHost(response.url)
   const contentType = response.headers.get('content-type') ?? ''
+  summary.contentType = contentType || '(none)'
 
-  if (status !== 200 && status !== 206) {
-    try {
-      await response.body?.cancel()
-    } catch {
-      // ignore cleanup errors
-    }
-    throw new Error(`HTTP ${status}`)
-  }
-
-  if (contentType.toLowerCase().includes('html')) {
-    try {
-      await response.body?.cancel()
-    } catch {
-      // ignore cleanup errors
-    }
-    throw new Error(`HTML content-type "${contentType}"`)
-  }
-
-  let bytes = 0
+  let text = ''
   try {
     if (response.body) {
       const reader = response.body.getReader()
       const { value, done } = await reader.read()
-      if (!done && value) bytes = value.byteLength
+      if (!done && value) {
+        const chunk = value.byteLength > PROBE_BYTE_LIMIT ? value.subarray(0, PROBE_BYTE_LIMIT) : value
+        summary.bytes = chunk.byteLength
+        text = new TextDecoder('utf-8').decode(chunk)
+      }
       try {
         await reader.cancel()
       } catch {
@@ -280,17 +332,88 @@ async function probeFileUrl(fileUrl) {
       }
     } else {
       const buffer = await response.arrayBuffer()
-      bytes = buffer.byteLength
+      const chunk =
+        buffer.byteLength > PROBE_BYTE_LIMIT
+          ? new Uint8Array(buffer, 0, PROBE_BYTE_LIMIT)
+          : new Uint8Array(buffer)
+      summary.bytes = chunk.byteLength
+      text = new TextDecoder('utf-8').decode(chunk)
     }
   } catch (error) {
-    throw new Error(`body read error: ${error.message}`)
+    summary.error = sanitizeBodySnippet(`body read error: ${error.message}`, secrets)
+    return summary
   }
 
-  if (bytes <= 0) {
-    throw new Error('empty response body')
+  if (contentType.toLowerCase().includes('html')) {
+    summary.title = sanitizeBodySnippet(extractHtmlTitle(text), secrets)
+  }
+  summary.snippet = sanitizeBodySnippet(text, secrets).slice(0, BODY_SNIPPET_LIMIT)
+  return summary
+}
+
+function probeSucceeded(probe) {
+  if (!probe || probe.error) return false
+  if (probe.status !== 200 && probe.status !== 206) return false
+  if (probe.contentType.toLowerCase().includes('html')) return false
+  return probe.bytes >= 1
+}
+
+function probeHasHtml(probe) {
+  return Boolean(probe) && !probe.error && probe.contentType.toLowerCase().includes('html')
+}
+
+function summarizeProbe(probe) {
+  if (!probe) return '(missing)'
+  const parts = [
+    `HTTP ${probe.status ?? '(none)'}`,
+    `host=${probe.host}`,
+    `content-type=${probe.contentType || '(none)'}`,
+    `bytes=${probe.bytes}`
+  ]
+  if (probe.title) parts.push(`title=${JSON.stringify(probe.title)}`)
+  if (probe.error) parts.push(`error=${probe.error}`)
+  else if (probe.snippet) parts.push(`body=${JSON.stringify(probe.snippet)}`)
+  return parts.join('; ')
+}
+
+/** Decide the UA gate from the four probe summaries. */
+function evaluateUaGate(probes) {
+  const byName = new Map(probes.map((probe) => [probe.name, probe]))
+  const initial = byName.get('bookorbit-initial')
+  const range = byName.get('bookorbit-range')
+  const mobileInitial = byName.get('mobile-initial')
+
+  if (probeSucceeded(initial)) {
+    if (!probeSucceeded(range)) {
+      return {
+        pass: true,
+        detail: `Range probe failed but BookOrbit initial download succeeded; failure is Range-specific and the real download is fine (bookorbit-range: ${summarizeProbe(range)})`
+      }
+    }
+    return { pass: true, detail: undefined }
   }
 
-  return { status, contentType: contentType || '(none)', bytes }
+  if (probeSucceeded(mobileInitial)) {
+    return {
+      pass: false,
+      detail: `bookorbit-initial [${summarizeProbe(initial)}]; mobile-initial [${summarizeProbe(mobileInitial)}]`,
+      reason: 'UA-specific — BookOrbit User-Agent gets HTML, mobile UA works'
+    }
+  }
+
+  if (probeHasHtml(initial) && probeHasHtml(mobileInitial)) {
+    return {
+      pass: false,
+      detail: `bookorbit-initial [${summarizeProbe(initial)}]; mobile-initial [${summarizeProbe(mobileInitial)}]`,
+      reason: 'HTML page regardless of User-Agent'
+    }
+  }
+
+  return {
+    pass: false,
+    detail: `bookorbit-initial [${summarizeProbe(initial)}]; mobile-initial [${summarizeProbe(mobileInitial)}]`,
+    reason: 'BookOrbit initial download did not succeed'
+  }
 }
 
 function renderStep(step, secrets) {
@@ -493,20 +616,37 @@ async function runLive(input) {
     detail: `Code=${downloadPayload.Code ?? 0}; FileUrl received`
   })
 
-  // Step 5: the actual gate. Fetch the pre-signed FileUrl with BookOrbit's
-  // fixed headers. One GET, range limited to 1 KiB, no retry.
-  try {
-    const result = await probeFileUrl(fileUrl)
-    steps.push({
-      name: 'ua-gate',
-      status: 'PASS',
-      detail: `HTTP ${result.status}; content-type=${result.contentType}; bytes=${result.bytes}`
-    })
-  } catch (error) {
-    return fail('ua-gate', error.message, `BookOrbit UA fetch failed: ${error.message}`)
+  // Step 5: the actual gate. Probe the same pre-signed FileUrl with four
+  // request shapes, one GET each, no retries. bookorbit-initial is the real
+  // BookOrbit download shape (no Range); the rest isolate UA vs Range causes.
+  const probes = []
+  for (const probe of buildProbes()) {
+    probes.push(await probeOnce(fileUrl, probe, secrets))
   }
 
-  return emitResult({ steps, meta, secrets, gate: 'PASS' })
+  const gate = evaluateUaGate(probes)
+
+  for (const probe of probes) {
+    steps.push({
+      name: `probe-${probe.name}`,
+      status: probeSucceeded(probe) ? 'PASS' : 'FAIL',
+      detail: summarizeProbe(probe)
+    })
+  }
+
+  steps.push({
+    name: 'ua-gate',
+    status: gate.pass ? 'PASS' : 'FAIL',
+    ...(gate.detail ? { detail: gate.detail } : {})
+  })
+
+  return emitResult({
+    steps,
+    meta,
+    secrets,
+    gate: gate.pass ? 'PASS' : 'FAIL',
+    reason: gate.reason
+  })
 }
 
 const TOKEN_VECTORS = [
