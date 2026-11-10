@@ -66,7 +66,7 @@ export default async function run(h) {
 
   // --- exact Query from a trimmed title and author ------------------------
   {
-    const client = createFakeClient([stoppedAt(page1)])
+    const client = createFakeClient([stoppedAt(page1), stoppedAt(page1)])
     const rows = await searchFiles({
       client,
       session,
@@ -80,15 +80,30 @@ export default async function run(h) {
       host
     })
 
-    h.expectEqual(client.calls.length, 1, 'title+author: one page request')
+    h.expectEqual(client.calls.length, 2, 'title+author: one page per normalization form')
     h.expectEqual(client.calls[0].apiKey, API_KEY, 'title+author: sends the session ApiKey')
     h.expectEqual(
       client.calls[0].query,
-      'Testowa Książka Synthetic Author',
-      'title+author: trims and joins into the exact Query'
+      'Testowa Książka Synthetic Author'.normalize('NFC'),
+      'title+author: trims and joins into the exact NFC Query'
+    )
+    h.expectEqual(
+      client.calls[1].query,
+      'Testowa Książka Synthetic Author'.normalize('NFD'),
+      'title+author: second request uses the NFD form'
     )
     h.expectEqual(client.calls[0].page, 1, 'title+author: first request is PageNumber 1')
+    h.expectEqual(
+      client.calls[1].page,
+      1,
+      'title+author: NFD request also starts at PageNumber 1'
+    )
     h.expectEqual(client.calls[0].extension, 'epub', 'title+author: single format sends Extension')
+    h.expectEqual(
+      client.calls[1].extension,
+      'epub',
+      'title+author: NFD request also sends Extension'
+    )
     h.ok(
       'title+author: passes a per-page AbortSignal',
       client.calls[0].signal instanceof AbortSignal
@@ -97,7 +112,64 @@ export default async function run(h) {
       'title+author: a fresh per-page signal is not aborted',
       !client.calls[0].signal.aborted
     )
-    h.expectEqual(rows, page1.Results, 'title+author: returns raw Results rows')
+    h.ok(
+      'title+author: NFD request passes a per-page AbortSignal',
+      client.calls[1].signal instanceof AbortSignal
+    )
+    h.ok(
+      'title+author: NFD per-page signal is not aborted',
+      !client.calls[1].signal.aborted
+    )
+    h.expectEqual(
+      rows,
+      [...page1.Results, ...page1.Results],
+      'title+author: merges raw Results rows from both normalization forms'
+    )
+  }
+
+  // --- a Polish query tries NFD after an empty NFC page --------------------
+  {
+    const nfcQuery = 'Twarz Księżyca Parnicki'.normalize('NFC')
+    const nfdQuery = nfcQuery.normalize('NFD')
+    const target = file(8850790304)
+    const client = createFakeClient([
+      stoppedAt({ Results: [] }),
+      stoppedAt({ Results: [target] })
+    ])
+    const rows = await searchFiles({
+      client,
+      session,
+      query: { title: 'Twarz Księżyca', author: 'Parnicki' },
+      formats: ['epub'],
+      limit: 20,
+      host
+    })
+
+    h.ok('polish: NFC and NFD differ', nfcQuery !== nfdQuery)
+    h.expectEqual(client.calls.length, 2, 'polish: requests both normalization forms')
+    h.expectEqual(client.calls[0].query, nfcQuery, 'polish: first request uses NFC')
+    h.expectEqual(client.calls[1].query, nfdQuery, 'polish: second request uses NFD')
+    h.expectEqual(client.calls[1].page, 1, 'polish: NFD request starts at PageNumber 1')
+    h.ok(
+      'polish: returns the NFD-only target row',
+      rows.some((row) => row?.FileId === target.FileId)
+    )
+  }
+
+  // --- an ASCII query collapses to one normalization variant --------------
+  {
+    const client = createFakeClient([stoppedAt(page1)])
+    await searchFiles({
+      client,
+      session,
+      query: { title: 'Test' },
+      formats: ['epub'],
+      limit: 20,
+      host
+    })
+
+    h.expectEqual(client.calls.length, 1, 'ASCII: sends only one query variant')
+    h.expectEqual(client.calls[0].query, 'Test', 'ASCII: query is unchanged')
   }
 
   // --- ISBN-only query and no Extension for multiple formats --------------

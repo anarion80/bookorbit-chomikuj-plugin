@@ -9,7 +9,8 @@
  * A later page failure, an exhausted budget, or an aborted caller signal
  * returns the rows collected so far instead of throwing, so one search attempt
  * never spends the host's whole deadline. Only a failed or unusable first page
- * is thrown.
+ * is thrown. A query is searched in both its NFC and NFD forms because
+ * Chomikuj's index does not normalize filenames.
  */
 
 export const SEARCH_BUDGET_MS = 12000
@@ -47,7 +48,7 @@ function combineWithTimeout(signal, remainingMs) {
 
 /**
  * Search Chomikuj for documents, merging raw result rows across up to three
- * pages within a 12 s self-budget.
+ * pages per normalization form within a 12 s self-budget.
  *
  * @param {{
  *   client: { searchPage: Function },
@@ -86,49 +87,57 @@ export async function searchFiles({
   const budget = Number.isFinite(budgetMs) && budgetMs >= 0 ? budgetMs : SEARCH_BUDGET_MS
   const deadline = now() + budget
 
+  // Chomikuj does not normalize its index, and the same Polish text can be
+  // stored either composed (NFC) or decomposed (NFD). Try both forms; ASCII
+  // and ISBN queries normalize to the same string, so they still make one pass.
+  const variants = [...new Set([queryText.normalize('NFC'), queryText.normalize('NFD')])]
+
   const rows = []
   const fileIds = new Set()
-  let page = 1
 
-  while (page <= MAX_PAGES) {
-    if (signal?.aborted) break
+  for (const variant of variants) {
+    let page = 1
 
-    const remaining = deadline - now()
-    if (remaining <= 0) break
+    while (page <= MAX_PAGES) {
+      if (signal?.aborted) break
 
-    const options = {
-      query: queryText,
-      page,
-      signal: combineWithTimeout(signal, remaining)
-    }
-    if (singleFormat) options.extension = extension
+      const remaining = deadline - now()
+      if (remaining <= 0) break
 
-    let payload
-    try {
-      payload = await client.searchPage(apiKey, options)
-    } catch (error) {
-      if (page === 1) throw error
-      break
-    }
-
-    const results = payload?.Results
-    if (!Array.isArray(results)) {
-      if (page === 1) {
-        throw host.fail('error', 'Chomikuj search returned an invalid Results payload')
+      const options = {
+        query: variant,
+        page,
+        signal: combineWithTimeout(signal, remaining)
       }
-      break
+      if (singleFormat) options.extension = extension
+
+      let payload
+      try {
+        payload = await client.searchPage(apiKey, options)
+      } catch (error) {
+        if (page === 1) throw error
+        break
+      }
+
+      const results = payload?.Results
+      if (!Array.isArray(results)) {
+        if (page === 1) {
+          throw host.fail('error', 'Chomikuj search returned an invalid Results payload')
+        }
+        break
+      }
+
+      rows.push(...results)
+      for (const file of results) {
+        const fileId = file?.FileId
+        if (fileId !== undefined && fileId !== null) fileIds.add(String(fileId))
+      }
+
+      if (fileIds.size >= target) break
+      if (payload.IsNextPageAvailable !== true) break
+
+      page += 1
     }
-
-    rows.push(...results)
-    for (const file of results) {
-      const fileId = file?.FileId
-      if (fileId !== undefined && fileId !== null) fileIds.add(String(fileId))
-    }
-
-    if (fileIds.size >= target) break
-    if (payload.IsNextPageAvailable !== true) break
-
-    page += 1
   }
 
   return rows
