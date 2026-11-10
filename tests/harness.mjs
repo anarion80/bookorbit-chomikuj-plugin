@@ -121,6 +121,9 @@ export function createHarness(options = {}) {
   }
 
   function ok(name, condition, extra) {
+    if (typeof name !== 'string' || name.length === 0) {
+      throw new Error('harness.ok requires a string name as its first argument')
+    }
     return record(name, condition, extra)
   }
 

@@ -84,7 +84,7 @@ export default async function run(h) {
       signToken('account/login', '', expectedBody),
       'login: token signs the request body'
     )
-    h.ok(!Object.hasOwn(headers, 'Api-Key'), 'login: no Api-Key header')
+    h.ok('login: no Api-Key header', !Object.hasOwn(headers, 'Api-Key'))
     h.expectEqual(payload, body, 'login: returns the parsed payload')
   }
 
@@ -256,8 +256,8 @@ export default async function run(h) {
     h.expectEqual(error?.retryable, true, 'accountInfo: throttled is retryable')
     h.expectEqual(error?.status, 429, 'accountInfo: error carries the HTTP status')
     h.ok(
-      error instanceof Error && error.constructor === Error,
-      'accountInfo: throws a plain Error, not a custom subclass'
+      'accountInfo: throws a plain Error, not a custom subclass',
+      error instanceof Error && error.constructor === Error
     )
   }
 
@@ -308,8 +308,8 @@ export default async function run(h) {
       'accountInfo: Cloudflare throws unreachable'
     )
     h.ok(
-      accountError?.message.toLowerCase().includes('cloudflare'),
       'accountInfo: Cloudflare message names the challenge',
+      accountError?.message.toLowerCase().includes('cloudflare'),
       accountError?.message
     )
 
@@ -362,8 +362,8 @@ export default async function run(h) {
     h.expectEqual(error?.failure, 'error', 'downloadUrl: 605 throws error')
     h.expectEqual(error?.retryable, false, 'downloadUrl: 605 is non-retryable')
     h.ok(
-      error?.message.toLowerCase().includes('not enough transfer'),
       'downloadUrl: 605 message mentions not enough transfer',
+      error?.message.toLowerCase().includes('not enough transfer'),
       error?.message
     )
     h.expectEqual(error?.status, 200, 'downloadUrl: 605 keeps the HTTP status')
@@ -379,8 +379,8 @@ export default async function run(h) {
       'downloadUrl: token signs the FileId query'
     )
     h.ok(
-      error instanceof Error && error.constructor === Error,
-      'downloadUrl: 605 throws a plain Error'
+      'downloadUrl: 605 throws a plain Error',
+      error instanceof Error && error.constructor === Error
     )
   }
 
@@ -405,8 +405,8 @@ export default async function run(h) {
     )
     h.expectEqual(payload, body, 'downloadUrl: returns the parsed payload')
     h.ok(
-      typeof payload.FileUrl === 'string' && payload.FileUrl.length > 0,
-      'downloadUrl: success payload has a non-empty FileUrl'
+      'downloadUrl: success payload has a non-empty FileUrl',
+      typeof payload.FileUrl === 'string' && payload.FileUrl.length > 0
     )
   }
 
@@ -422,8 +422,8 @@ export default async function run(h) {
     h.expectEqual(error?.failure, 'error', 'downloadUrl: missing FileUrl throws error')
     h.expectEqual(error?.retryable, false, 'downloadUrl: missing FileUrl is non-retryable')
     h.ok(
-      error?.message.toLowerCase().includes('fileurl'),
       'downloadUrl: missing FileUrl message names the field',
+      error?.message.toLowerCase().includes('fileurl'),
       error?.message
     )
   }

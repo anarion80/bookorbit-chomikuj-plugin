@@ -41,6 +41,25 @@ export default async function run(h) {
     'ok records the failing assertion as FAIL'
   )
 
+  // A reversed call such as ok(true, 'label') must throw instead of silently
+  // passing because the truthy condition looks like a name.
+  const guarded = createHarness({ silent: true })
+  let reversedError
+  try {
+    guarded.ok(true, 'reversed label')
+  } catch (error) {
+    reversedError = error
+  }
+  h.ok(
+    'ok throws when the name is not a string',
+    reversedError instanceof Error &&
+      reversedError.message === 'harness.ok requires a string name as its first argument'
+  )
+  h.expectEqual(guarded.results.length, 0, 'reversed ok does not record an assertion')
+  h.expectEqual(guarded.ok('label', true), true, 'ok accepts the label first')
+  h.expectEqual(guarded.results.length, 1, 'label-first ok records one assertion')
+  h.expectEqual(guarded.results[0].pass, true, 'label-first ok records PASS')
+
   // expectEqual compares deeply, reports a readable diff, and feeds finish().
   h.expectEqual(
     { title: 'Synthetic Title', size: 1024 },
