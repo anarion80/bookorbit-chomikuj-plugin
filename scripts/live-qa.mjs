@@ -53,6 +53,24 @@ function checkEnvironment(env = process.env) {
   const password = typeof env.CHOMIKUJ_PASSWORD === 'string' ? env.CHOMIKUJ_PASSWORD : ''
   const rawQuery = typeof env.CHOMIKUJ_QUERY === 'string' ? env.CHOMIKUJ_QUERY.trim() : ''
   const query = rawQuery === '' ? 'test' : rawQuery
+  const rawPaidFileId =
+    typeof env.CHOMIKUJ_PAID_FILE_ID === 'string' ? env.CHOMIKUJ_PAID_FILE_ID.trim() : ''
+  const paidFileId = rawPaidFileId === '' ? '' : rawPaidFileId
+
+  if (paidFileId !== '' && !/^\d+$/.test(paidFileId)) {
+    return {
+      ok: false,
+      exitCode: 1,
+      message: [
+        'CHOMIKUJ_PAID_FILE_ID must be a numeric Chomikuj FileId (digits only).',
+        '',
+        'It is optional. When set, the no-spend step probes that paid FileId so',
+        'the refusal is deterministic even if the search returns no paid result.',
+        'When unset, the script falls back to a synthetic id that is never sent to',
+        '/files/download when the allowTransferSpend=false guard works.'
+      ].join('\n')
+    }
+  }
 
   const missing = []
   if (username === '') missing.push('CHOMIKUJ_USERNAME')
@@ -73,12 +91,16 @@ function checkEnvironment(env = process.env) {
         '',
         'Optional: CHOMIKUJ_QUERY=<search text> (default: test). Choose a query',
         'whose results include both a free and a paid ebook.',
+        'Optional: CHOMIKUJ_PAID_FILE_ID=<numeric FileId>. When set, the no-spend',
+        'step probes this paid file, so the refusal is deterministic even when the',
+        'search returns no paid result. When unset, a synthetic id is used instead;',
+        'that id is never sent to /files/download when the spend guard works.',
         'Exit code 2 means no credentials were provided; no network calls were made.'
       ].join('\n')
     }
   }
 
-  return { ok: true, username, password, query }
+  return { ok: true, username, password, query, paidFileId }
 }
 
 /**
@@ -505,13 +527,30 @@ async function runLive(input) {
     return finish()
   }
 
-  const paidCandidate = pickPaidCandidate(candidates)
-  if (paidCandidate === undefined) {
-    fail(
-      'no-spend',
-      `no paid candidate (freeleech !== true) among ${candidates.length}; set CHOMIKUJ_QUERY to a query whose results include both a free and a paid ebook`
-    )
-    return finish()
+  let paidCandidate = pickPaidCandidate(candidates)
+  let paidSource = 'search'
+  if (paidCandidate !== undefined) {
+    paidSource = 'search'
+  } else if (typeof input.paidFileId === 'string' && input.paidFileId !== '') {
+    paidCandidate = {
+      guid: input.paidFileId,
+      title: 'chomikuj paid probe',
+      bookTitle: 'chomikuj paid probe',
+      format: 'pdf',
+      sizeBytes: null,
+      freeleech: false
+    }
+    paidSource = 'env'
+  } else {
+    paidCandidate = {
+      guid: '1',
+      title: 'chomikuj paid probe',
+      bookTitle: 'chomikuj paid probe',
+      format: 'pdf',
+      sizeBytes: null,
+      freeleech: false
+    }
+    paidSource = 'synthetic'
   }
 
   config.settings.allowTransferSpend = false
@@ -527,7 +566,7 @@ async function runLive(input) {
   if (refusal === null) {
     fail(
       'no-spend',
-      'resolveFile resolved a paid file with allowTransferSpend=false; expected a refusal before /files/download'
+      `resolveFile resolved a paid file (paidSource=${paidSource}) with allowTransferSpend=false; expected a refusal before /files/download`
     )
     return finish()
   }
@@ -535,7 +574,7 @@ async function runLive(input) {
   if (refusal.failure !== 'error') {
     fail(
       'no-spend',
-      `refusal.failure was ${JSON.stringify(refusal.failure)}, expected "error": ${describeError(refusal)}`
+      `paidSource=${paidSource}; refusal.failure was ${JSON.stringify(refusal.failure)}, expected "error": ${describeError(refusal)}`
     )
     return finish()
   }
@@ -543,17 +582,23 @@ async function runLive(input) {
   if (!/disabled|spending|spend|transfer/i.test(describeError(refusal))) {
     fail(
       'no-spend',
-      `refusal message does not mention disabled spending or transfer: ${describeError(refusal)}`
+      `paidSource=${paidSource}; refusal message does not mention disabled spending or transfer: ${describeError(refusal)}`
     )
     return finish()
   }
 
   if (host.counters.downloads !== 0) {
-    fail('no-spend', `expected zero /files/download calls, observed ${host.counters.downloads}`)
+    fail(
+      'no-spend',
+      `paidSource=${paidSource}; expected zero /files/download calls, observed ${host.counters.downloads}`
+    )
     return finish()
   }
 
-  pass('no-spend', 'failure=error; message mentions disabled spending; /files/download calls=0')
+  pass(
+    'no-spend',
+    `paidSource=${paidSource}; failure=error; message mentions disabled spending; /files/download calls=0`
+  )
 
   return finish()
 }
