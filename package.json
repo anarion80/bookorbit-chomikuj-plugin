@@ -7,7 +7,7 @@
     "node": ">=24"
   },
   "scripts": {
-    "build": "esbuild src/index.mjs --bundle --format=esm --platform=node --target=node24 --outfile=dist/index.mjs",
+    "build": "node scripts/build.mjs",
     "check": "node scripts/check-plugin.mjs",
     "test": "node verify.mjs",
     "live-spike": "node scripts/live-spike.mjs"
