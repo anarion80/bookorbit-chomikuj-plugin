@@ -1,51 +1,142 @@
 # BookOrbit Chomikuj.pl plugin
 
-A BookOrbit indexer plugin for Chomikuj.pl.
+An indexer plugin for BookOrbit that searches Chomikuj.pl and downloads ebook files with your Chomikuj account's transfer.
 
 ## What it is
 
-Placeholder: describes the plugin and what it does — filled in by Todo 21.
+This plugin connects BookOrbit to Chomikuj.pl. It searches Chomikuj's Documents collection, returns matching ebook releases, and resolves a download URL for the release you pick. Downloads use the transfer attached to your own Chomikuj account. The plugin does not scrape the website HTML and does not download anonymously.
+
+## Status
+
+- The offline suite is verified: unit tests, the plugin contract check, and the bundled build all pass.
+- The live Chomikuj API gate is owner-run and still pending. The gate needs a real Chomikuj account and is run outside this project's automated checks. Until the owner runs it, treat live behavior as unverified.
+- v0.1.0 has no auto-update channel.
 
 ## Install
 
-Placeholder: how to build and install the single `.mjs` plugin into BookOrbit.
+BookOrbit installs a plugin from a single `.mjs` file.
+
+Build the bundle first (see [Development](#development)) and install `dist/index.mjs`:
+
+1. In BookOrbit, open **Settings**, then **Server**, then **Requests**, then **Sources**.
+2. Choose **Install plugin** and select `dist/index.mjs`.
+
+Alternatively, copy the built file into BookOrbit's data directory:
+
+```
+<APP_DATA_PATH>/plugins/indexers/chomikuj/index.mjs
+```
+
+Create the `chomikuj` directory if it does not exist. The plugin is a single file and must stay under 512 KiB; the build fails if the bundle reaches that size. Restart or reload BookOrbit if the new source does not appear immediately.
 
 ## Credentials
 
-Placeholder: which Chomikuj account credential BookOrbit stores and in which field.
+Chomikuj needs both a username and a password, but BookOrbit only stores one secret per source.
+
+- Put your **Chomikuj username** in the plugin's `username` setting.
+- Put your **Chomikuj password** in BookOrbit's credential field.
+
+BookOrbit labels that credential field **"API key"**. BookOrbit has no password credential kind, so it reuses the API key field for this plugin. The plugin sends the value as the Chomikuj password during login. Do not paste a Chomikuj API key or some other token there; the password is what Chomikuj expects.
+
+The plugin never logs or persists the password or the session key. A successful login returns a short-lived Chomikuj session key that the plugin keeps in memory.
 
 ## Settings
 
-Placeholder: the plugin settings fields and their defaults.
+| Setting | Type | Default | What it does |
+| --- | --- | --- | --- |
+| `username` | string | none | Your Chomikuj.pl account name. |
+| `formats` | list | `epub,mobi,pdf` | Ebook formats to accept. Options: `epub`, `kepub`, `mobi`, `azw3`, `azw`, `fb2`, `pdf`, `djvu`. At least one format is required. |
+| `allowTransferSpend` | boolean | on (`true`) | Whether the plugin may resolve paid downloads that spend your transfer. |
+
+How `formats` behaves:
+
+- Exactly one format narrows the Chomikuj search on the server with an `Extension` hint.
+- Several formats are filtered locally after the results come back.
+- Archive formats are never accepted, even if typed into the setting.
+
+How `allowTransferSpend` behaves:
+
+- It defaults to **on**, so paid files may be offered and downloaded.
+- When it is **off**, the plugin refuses paid files before it calls the download API. Files the owner marks as free for you, and accounts with unlimited transfer, are still allowed.
+- The setting only blocks spending. It does not grant free downloads.
+
+There is also a base URL setting in the manifest, defaulting to `https://mobile.chomikuj.pl`. You normally should not change it.
 
 ## How search works
 
-Placeholder: Documents-only search, format selection, and newest-first ordering.
+- The plugin searches Chomikuj's **Documents** media type only (`MediaType=Documents`). It does not look in other media categories.
+- Results are ordered newest first using `FileId` as a recency proxy. Chomikuj does not expose a reliable publication date, so the plugin never invents one and never sets a publication date on a release.
+- The order decides which rows survive the requested result limit. BookOrbit may re-rank merged results by score afterwards, so the final display order is not guaranteed to match `FileId` order.
+- Results are deduplicated by `FileId`, and each download is resolved with a single `files/download` call.
+- Only files with an importable format are returned. Archive formats are dropped.
 
 ## Free vs paid
 
-Placeholder: how free and paid transfer limits affect results and downloads.
+Chomikuj's transfer rules apply to the download, not to the search:
 
-## Preview cost warning
+- **Unregistered users** are limited to 1 MB per file.
+- **Registered free accounts** get roughly 50 MB of transfer per week.
+- **Files you own** are free to download for you.
+- **Paid or unlimited transfer** removes most limits. The plugin detects an unlimited account from the account payload.
+- **Code 605 ("not enough transfer")** is a permanent quota error. It is not a rate limit and the plugin does not retry it. Free up transfer or use an account that has enough.
 
-Placeholder: warning that previewing a paid file can spend transfer.
+The plugin runs an advisory quota check before requesting a download URL, but Chomikuj's 605 response is the authoritative answer.
+
+## Preview can spend transfer
+
+> **Warning: previewing or inspecting a paid file can spend your Chomikuj transfer.** BookOrbit calls `resolveFile` when it previews or inspects a release, and Chomikuj charges transfer when the download URL is issued, even if BookOrbit never downloads the file. The issued URL is cached for about 60 seconds; a later grab after that window can charge again. Turn `allowTransferSpend` off to block paid files before the download API is called. Free files and unlimited accounts are unaffected.
 
 ## Troubleshooting
 
-Placeholder: common errors, failure codes, and what to do about them.
+- **401 or 403 (unauthorized):** the username or password is wrong, or the Chomikuj session expired. Re-enter both values. The plugin clears a cached session after an authorization failure so the next attempt logs in again.
+- **429 (rate limited):** Chomikuj is throttling requests. The plugin retries account and search calls once on 429 or 5xx, honoring `Retry-After` up to two seconds. Login and download calls are never retried. Wait and try again.
+- **Cloudflare challenge:** a page or response looks like a Cloudflare challenge. The plugin treats this as unreachable and does not retry it. Change network or wait, then try again. The plugin has no challenge solver.
+- **605 (not enough transfer):** your account lacks the transfer for this file. This is permanent for the current balance. See [Free vs paid](#free-vs-paid).
+- **Empty results:** check that the title, author, or ISBN is correct, that your chosen `formats` match the file, and that the book is a Chomikuj Documents item. A single format also narrows the server search, so try a broader format list.
+- **Base URL problems:** the default is `https://mobile.chomikuj.pl`, and the plugin appends `/api/v3` when it is missing. Reset the base URL if you changed it.
+- **Live gate still pending:** the offline suite does not prove the live Chomikuj API works end to end. That check is owner-run with a real account.
 
 ## No archives
 
-Placeholder: archive formats are never offered, returned, or extracted.
+Archive formats are never offered, returned, or extracted. The plugin drops:
+
+`zip`, `rar`, `7z`, `tar`, `gz`, `bz2`, `xz`, `cbz`, `cbr`, `cb7`, `cbt`
+
+Comic archives such as `cbz`, `cbr`, `cb7`, and `cbt` are included in this rule. The plugin does not unpack anything.
 
 ## No auto-update
 
-Placeholder: v0.1.0 ships without signed auto-updates.
+v0.1.0 has no signed update channel and does not check for or install updates. To upgrade, build or obtain a new `dist/index.mjs` and install it again, replacing the existing file.
+
+## Uninstall
+
+1. Remove the plugin file at `<APP_DATA_PATH>/plugins/indexers/chomikuj/index.mjs`, or delete the `chomikuj` directory.
+2. Remove the configured source in BookOrbit under **Settings**, then **Server**, then **Requests**, then **Sources**.
+3. Restart or reload BookOrbit if the source remains visible.
 
 ## Development
 
-Placeholder: build, check, and test commands.
+Requirements: Node.js 24 or newer.
+
+```
+npm ci
+npm run build
+npm run check
+npm test
+```
+
+- `npm run build` bundles `src/index.mjs` into `dist/index.mjs` and fails if the output is at or above 512 KiB.
+- `npm run check` validates the plugin shape and safety rules.
+- `npm test` runs the offline verification suite.
+
+The live Chomikuj feasibility gate is owner-run. Run it only with your own account and never paste credentials into chat, issues, or commits:
+
+```
+CHOMIKUJ_USERNAME=... CHOMIKUJ_PASSWORD=... node scripts/live-spike.mjs
+```
+
+The script logs in, reads the account, resolves a free PDF, and checks that the returned file URL downloads with BookOrbit's fixed headers. Exit code 0 means the gate passed, 1 means it failed, and 2 means credentials were missing and no network calls were made.
 
 ## License
 
-MIT — see [LICENSE](LICENSE).
+MIT. See [LICENSE](LICENSE).
