@@ -137,6 +137,19 @@ CHOMIKUJ_USERNAME=... CHOMIKUJ_PASSWORD=... node scripts/live-spike.mjs
 
 The script logs in, reads the account, resolves a free PDF, and checks that the returned file URL downloads with BookOrbit's fixed headers. Exit code 0 means the gate passed, 1 means it failed, and 2 means credentials were missing and no network calls were made.
 
+### Live QA
+
+The end-to-end live QA is owner-run as well. Build first, then run it with your own account:
+
+```
+npm run build
+CHOMIKUJ_USERNAME=... CHOMIKUJ_PASSWORD=... node scripts/live-qa.mjs
+```
+
+It calls the built plugin's `test`, searches for `CHOMIKUJ_QUERY` (default `test`), resolves a free file, fetches the returned URL with BookOrbit's fixed `User-Agent` and `Range` headers, then confirms `allowTransferSpend=false` refuses a paid file without calling `files/download`. Use a free or test account, never a production one, for the paid-spend check. Evidence is written to `.omo/evidence/bookorbit-chomikuj-plugin/live-qa.txt`.
+
+Set `CHOMIKUJ_QUERY` to a query whose results include both a free and a paid ebook. Exit code 0 means `LIVE_QA=PASS`, 1 means a step failed, and 2 means credentials were missing and no network calls were made. Never paste your Chomikuj password or a session key into chat, issues, or commits; the script redacts credentials from its output and evidence file.
+
 ## License
 
 MIT. See [LICENSE](LICENSE).
