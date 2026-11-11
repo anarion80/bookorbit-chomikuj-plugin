@@ -124,6 +124,15 @@ export default async function run(h) {
     { failure: 'unreachable', message: 'cloudflare challenge', retryable: true }
   )
 
+  // A valid JSON API reply is not a challenge page, even when a user-visible
+  // value such as a file name contains a marker phrase.
+  expectOutcome(
+    h,
+    'classifyHttp does not flag a JSON search reply with a "Just a Moment" file name',
+    classifyHttp(200, '{"Code":0,"Results":[{"FileName":"Just a Moment.pdf"}]}'),
+    OK
+  )
+
   // --- HTTP message detail ------------------------------------------------
   expectOutcome(
     h,
@@ -357,6 +366,16 @@ export default async function run(h) {
     'classifyLogin Cloudflare 200 is unreachable',
     classifyLogin(200, '<script src="/cdn-cgi/challenge-platform/x"></script>'),
     { failure: 'unreachable', message: 'cloudflare challenge', retryable: true }
+  )
+  expectOutcome(
+    h,
+    'classifyLogin(403) with a JSON "Just a Moment" message is not a challenge',
+    classifyLogin(403, '{"Message":"Just a Moment"}'),
+    {
+      failure: 'unauthorized',
+      message: 'unauthorized: Just a Moment',
+      retryable: false
+    }
   )
   expectOutcome(
     h,

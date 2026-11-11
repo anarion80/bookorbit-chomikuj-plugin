@@ -90,6 +90,18 @@ function hasCloudflareChallenge(bodyText) {
   return CLOUDFLARE_MARKERS.some((marker) => text.includes(marker))
 }
 
+/** A parsed JSON body is an API reply, not a Cloudflare challenge page. */
+function isJsonDocument(bodyText) {
+  const text = typeof bodyText === 'string' ? bodyText : toBodyText(bodyText)
+  if (!text) return false
+  try {
+    JSON.parse(text)
+    return true
+  } catch {
+    return false
+  }
+}
+
 function toBodyText(body) {
   if (typeof body === 'string') return body
   if (body === null || body === undefined) return ''
@@ -146,7 +158,9 @@ export function classifyHttp(status, bodyText = '') {
   const code = normalizeStatus(status)
   const text = typeof bodyText === 'string' ? bodyText : toBodyText(bodyText)
 
-  if (hasCloudflareChallenge(text)) {
+  // A parsed JSON body is an API reply; user-visible values inside it can
+  // contain marker phrases.
+  if (!isJsonDocument(text) && hasCloudflareChallenge(text)) {
     return result('unreachable', 'cloudflare challenge', true)
   }
 
@@ -223,7 +237,9 @@ export function classifyLogin(status, body) {
 
   if (is2xx(code) && apiKey) return success()
 
-  if (hasCloudflareChallenge(text)) {
+  // A parsed JSON body is an API reply; user-visible values inside it can
+  // contain marker phrases.
+  if (!isJsonDocument(text) && hasCloudflareChallenge(text)) {
     return result('unreachable', 'cloudflare challenge', true)
   }
 
