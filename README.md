@@ -9,25 +9,27 @@ This plugin connects BookOrbit to Chomikuj.pl. It searches Chomikuj's Documents 
 ## Status
 
 - The offline suite is verified: unit tests, the plugin contract check, and the bundled build all pass.
-- The live Chomikuj API gate is owner-run and still pending. The gate needs a real Chomikuj account and is run outside this project's automated checks. Until the owner runs it, treat live behavior as unverified.
+- The live Chomikuj API gate is owner-run; the latest recorded run passed (`UA_GATE=PASS`, `LIVE_QA=PASS`). It needs a real Chomikuj account and is not part of CI.
 - v0.1.0 has no auto-update channel.
 
 ## Install
 
 BookOrbit installs a plugin from a single `.mjs` file.
 
-Build the bundle first (see [Development](#development)) and install `dist/index.mjs`:
+Download `index.mjs` from the [latest release](https://github.com/anarion80/bookorbit-chomikuj-plugin/releases/latest/download/index.mjs), then install it:
 
 1. In BookOrbit, open **Settings**, then **Server**, then **Requests**, then **Sources**.
-2. Choose **Install plugin** and select `dist/index.mjs`.
+2. Choose **Install plugin** and select the downloaded `index.mjs`.
 
-Alternatively, copy the built file into BookOrbit's data directory:
+Alternatively, copy the file into BookOrbit's data directory:
 
 ```
 <APP_DATA_PATH>/plugins/indexers/chomikuj/index.mjs
 ```
 
 Create the `chomikuj` directory if it does not exist. The plugin is a single file and must stay under 512 KiB; the build fails if the bundle reaches that size. Restart or reload BookOrbit if the new source does not appear immediately.
+
+For development, build the bundle locally with `npm run build` (see [Development](#development)); that produces `dist/index.mjs`, which can be installed the same way.
 
 ## Credentials
 
@@ -146,7 +148,7 @@ npm run build
 CHOMIKUJ_USERNAME=... CHOMIKUJ_PASSWORD=... node scripts/live-qa.mjs
 ```
 
-It calls the built plugin's `test`, searches for `CHOMIKUJ_QUERY` (default `test`), resolves a free file, fetches the returned URL with BookOrbit's fixed `User-Agent` and `Range` headers, then confirms `allowTransferSpend=false` refuses a paid file without calling `files/download`. Use a free or test account, never a production one, for the paid-spend check. Evidence is written to `.omo/evidence/bookorbit-chomikuj-plugin/live-qa.txt`.
+It calls the built plugin's `test`, searches for `CHOMIKUJ_QUERY` (default `test`), resolves a free file, fetches the returned URL with BookOrbit's fixed `User-Agent: BookOrbit` and `Accept: */*` headers and no `Range`, then confirms `allowTransferSpend=false` refuses a paid file without calling `files/download`. Use a free or test account, never a production one, for the paid-spend check. Evidence is written to `.omo/evidence/bookorbit-chomikuj-plugin/live-qa.txt`.
 
 Set `CHOMIKUJ_QUERY` to a query whose results include both a free and a paid ebook. Exit code 0 means `LIVE_QA=PASS`, 1 means a step failed, and 2 means credentials were missing and no network calls were made. Never paste your Chomikuj password or a session key into chat, issues, or commits; the script redacts credentials from its output and evidence file.
 
