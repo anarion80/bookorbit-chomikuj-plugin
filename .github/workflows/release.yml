@@ -69,6 +69,14 @@ jobs:
       - name: Run tests
         run: npm test
 
+      - name: Verify tag matches plugin version
+        run: |
+          VERSION=$(node -e "import('./dist/index.mjs').then(m => console.log(m.default.version))")
+          if [ "v$VERSION" != "$GITHUB_REF_NAME" ]; then
+            echo "Tag $GITHUB_REF_NAME does not match plugin version $VERSION in src/index.mjs"
+            exit 1
+          fi
+
       - name: Create GitHub release
         env:
           GH_TOKEN: ${{ github.token }}
